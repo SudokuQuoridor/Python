@@ -1,1 +1,1 @@
-# IDAPython
+# Python
