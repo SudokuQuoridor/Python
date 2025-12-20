@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
     S([Start]) --> A["sub_7FF727702F84()"];
     A --> B["v6 = anti_isDebugPresent()"];
