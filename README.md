@@ -1,51 +1,39 @@
 ```mermaid
 flowchart TD
-    S([Start]) --> A["sub_7FF727702F84()"];
-    A --> B["v6 = anti_isDebugPresent()"];
-    B --> C["result = 0x427DD8E1"];
+    S([Start]) --> IDP{IsDebuggerPresent?}
+    IDP -- "True (A9680CA8)" --> EP1[ExitProcess]
+    IDP -- "False (E3FCBDEA)" --> CRDP{CheckRemoteDebuggerPresent?}
 
-    C --> D{"v6 == 0? (!v6)"};
-    D -- "Yes (No Debug)" --> E["result = 0xE3FCBDEA"];
-    D -- "No (Debug Detected)" --> F["result = 0xA9680CA8"];
+    CRDP -- "True (594E9962)" --> EP2[ExitProcess]
+    CRDP -- "False (A088A9FE)" --> NQIP{NtQueryInformationProcess<br/>(ProcessDebugPort=7)?}
 
-    E --> U1["anti_GetTickCount_10min()"];
-    F --> U1;
+    NQIP -- "True (FADE51E2)" --> EP3[ExitProcess]
+    NQIP -- "False (4507C434)" --> UPT{GetTickCount uptime<br/>(< 10 min)?}
 
-    U1 --> U2{"anti_GetTickCount_10min() == 0? (v1=1)"};
-    U2 -- "Yes (Boot less than 10min 등)" --> LS1["result = 0xBDC71E76"];
-    U2 -- "No" --> CPU1["result = 0x96DA6311"];
+    %% UPTIME branch
+    UPT -- "True (96DA6311)" --> CPU1{CPU logical processors<br/>(<= 1)?}
+    UPT -- "False (BDC71E76)" --> SLU[sleep(rand)] --> CPU2{CPU logical processors<br/>(<= 1)?}
 
-    LS1 --> LS2["Sleep(rand(0xEA60..0x1D4C0)) (60~120s)"];
-    LS2 --> CPU1;
+    %% CPU True path
+    CPU1 -- "True (D7107B7A)" --> SL1[sleep(rand)] --> C1[(3C463843)]
+    CPU2 -- "True (D7107B7A)" --> SL2[sleep(rand)] --> C2[(3C463843)]
 
-    CPU1 --> CPU2["sub_7FF7277011A9() (CPU Processor count check)"];
-    CPU2 --> CPU3{"CPU less than 2? (sub_7011A9()==0)"};
-    CPU3 -- "Yes" --> S30["result = 0xD7107B7A"];
-    CPU3 -- "No" --> CHK["result = 0x3C463843"];
+    %% CPU False path (go directly to C node)
+    CPU1 -- "False (3C463843)" --> C1
+    CPU2 -- "False (3C463843)" --> C2
 
-    S30 --> S30B["Sleep(rand(0x7530..0xEA60)) (30~60s)"];
-    S30B --> CHK;
+    %% Both C nodes go to same decoy block
+    C1 --> DEC1
+    C2 --> DEC1
 
-    CHK --> MEM1["sub_7FF727701223() (Memory check)"];
-    MEM1 --> MEM2{"Memory condition OK? (sub_701223()==0)"};
-    MEM2 -- "Yes" --> MEMS["result = 0x512BFF6B"];
-    MEM2 -- "No" --> TSTATE["result = 0x2ACD709C"];
+    %% Decoy block: Memory + Sleep timing
+    subgraph DEC1[Decoy / Environment Checks]
+        direction TD
+        MEM{Memory size<br/>(>= 4GB)?}
 
-    MEMS --> MEMSL["Sleep(rand(0x7530..0xEA60)) (30~60s)"];
-    MEMSL --> TSTATE;
+        MEM -- "True (2ACD709C)" --> TCHK{GetTickCount + Sleep<br/>delta < 50ms?}
+        MEM -- "False (512BFF6B)" --> SLM[sleep(rand)] --> MEM
 
-    TSTATE --> T1["anti_GetTickcount()"];
-    T1 --> T2{"anti_GetTickcount() == 0? (v1=1)"};
-    T2 -- "Yes" --> S510["result = 0xD39B4888"];
-    T2 -- "No" --> OK["result = 0x1D80F729"];
-
-    S510 --> S510B["Sleep(rand(0x1388..0x2710)) (5~10s)"];
-    S510B --> OK;
-
-    OK --> R(["Return result = 0x1D80F729"]);
-
-    X["Other/unhandled states (e.g., 0x594E9962 / 0xA088A9FE / 0xFADE51E2 / 0x4507C434)"] --> Z(["ExitProcess(0)"]);
-
-    RDP["sub_anti_CheckRemoteDebuggerPresent()"] --> RDP2{"== 0 ?"};
-    RDP2 -- "Yes" --> X;
-    RDP2 -- "No" --> X;
+        TCHK -- "True (1D80F729)" --> END1([Normal Exit])
+        TCHK -- "False (D39B4888)" --> SLD[sleep(rand)] --> END1
+    end
